@@ -110,7 +110,7 @@ fn print_network(net: &Ipv4Network) {
         "Netmask:",
         "First Host:",
         "Last Host:",
-        "Total Addresses:",
+        "Usable Addrs:",
     ];
     if count == 1 {
         labels = vec!["1 Address Total:"];
@@ -175,7 +175,7 @@ fn print_network(net: &Ipv4Network) {
 
     println!(
         "  {}  {}",
-        pad_label("Total Addresses:"),
-        format!("({} usable)", usable).cyan()
+        pad_label("Usable Addrs:"),
+        format!("{}", usable).bright_red()
     );
 }
