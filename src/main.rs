@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::env;
 use env_logger;
 use eyre::{Result, WrapErr};
 use ipnetwork::Ipv4Network;
@@ -6,6 +7,27 @@ use colored::*;
 use log::info;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Base IP for any leading "/prefix" argument:
+    /// If $DEFAULT_IP is set (and non-empty & valid), we parse just the IP portion
+    /// (dropping any trailing "/24" etc.); otherwise we fall back to "192.168.1.1".
+    static ref DEFAULT_NETWORK: Ipv4Addr = {
+        // grab the raw, or fallback literal
+        let raw = env::var("DEFAULT_NETWORK").unwrap_or_else(|_| "192.168.1.0".into());
+        // drop any "/…" suffix
+        let ip_part = raw.splitn(2, '/').next().unwrap();
+        // parse or warn+fallback
+        ip_part.parse().unwrap_or_else(|_| {
+            eprintln!(
+                "warning: env $DEFAULT_NETWORK ('{}') invalid; using 192.168.1.0",
+                raw
+            );
+            "192.168.1.1".parse().unwrap()
+        })
+    };
+}
 
 /// Command-line interface
 #[derive(Parser)]
@@ -44,28 +66,22 @@ fn main() -> Result<()> {
 /// # Errors
 /// Returns an error if any provided IP or prefix fails to parse.
 fn expand_args(raw_args: &[String]) -> Result<Vec<String>> {
-    // default base IP for any leading /prefix
-    let default_ip = Ipv4Addr::new(192, 168, 1, 1);
-    let mut last_ip: Option<Ipv4Addr> = Some(default_ip);
+    let mut last_ip: Option<Ipv4Addr> = Some(*DEFAULT_NETWORK);
     let mut out = Vec::with_capacity(raw_args.len());
 
     for raw in raw_args {
         let spec = if raw.starts_with('/') {
-            // strip leading slash
             let tok = &raw[1..];
             if tok.contains('/') {
-                // full spec like "/192.168.1.1/20"
                 let mut parts = tok.splitn(2, '/');
                 let ip_str = parts.next().unwrap();
                 last_ip = Some(Ipv4Addr::from_str(ip_str)?);
                 tok.to_string()
             } else {
-                // prefix-only like "/16"
                 let ip = last_ip.unwrap();
                 format!("{}/{}", ip, tok)
             }
         } else {
-            // full spec like "10.10.10.1/21"
             let mut parts = raw.splitn(2, '/');
             let ip_str = parts.next().unwrap();
             last_ip = Some(Ipv4Addr::from_str(ip_str)?);
@@ -110,7 +126,7 @@ fn print_network(net: &Ipv4Network) {
         "Netmask:",
         "First Host:",
         "Last Host:",
-        "Usable Addrs:",
+        "Addresses:",
     ];
     if count == 1 {
         labels = vec!["1 Address Total:"];
@@ -175,7 +191,7 @@ fn print_network(net: &Ipv4Network) {
 
     println!(
         "  {}  {}",
-        pad_label("Usable Addrs:"),
-        format!("{}", usable).bright_red()
+        pad_label("Addresses:"),
+        format!("({} usable)", usable).bright_red()
     );
 }
