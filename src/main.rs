@@ -31,7 +31,7 @@ lazy_static! {
 
 /// Command-line interface
 #[derive(Parser)]
-#[command(name = "cidr", version, author, about = "Pretty-print CIDR info for one or more addresses")]
+#[command(name = "cidr", version = env!("GIT_DESCRIBE"), author, about = "Pretty-print CIDR info for one or more addresses")]
 struct Cli {
     /// One or more IPs (with prefix), e.g. 10.10.10.1/16
     #[arg(value_name = "ADDRESS", num_args = 1..)]
