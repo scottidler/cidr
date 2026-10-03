@@ -1,13 +1,12 @@
 use clap::Parser;
-use std::env;
-use env_logger;
+use colored::*;
 use eyre::{Result, WrapErr};
 use ipnetwork::Ipv4Network;
-use colored::*;
+use lazy_static::lazy_static;
 use log::info;
+use std::env;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use lazy_static::lazy_static;
 
 lazy_static! {
     /// Base IP for any leading "/prefix" argument:
@@ -17,7 +16,7 @@ lazy_static! {
         // grab the raw, or fallback literal
         let raw = env::var("DEFAULT_NETWORK").unwrap_or_else(|_| "192.168.1.0".into());
         // drop any "/…" suffix
-        let ip_part = raw.splitn(2, '/').next().unwrap();
+        let ip_part = raw.split('/').next().unwrap();
         // parse or warn+fallback
         ip_part.parse().unwrap_or_else(|_| {
             eprintln!(
@@ -70,8 +69,7 @@ fn expand_args(raw_args: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(raw_args.len());
 
     for raw in raw_args {
-        let spec = if raw.starts_with('/') {
-            let tok = &raw[1..];
+        let spec = if let Some(tok) = raw.strip_prefix('/') {
             if tok.contains('/') {
                 let mut parts = tok.splitn(2, '/');
                 let ip_str = parts.next().unwrap();
@@ -97,12 +95,8 @@ fn expand_args(raw_args: &[String]) -> Result<Vec<String>> {
 /// Parse either “addr/prefix” or “addr” + separate netmask into an `Ipv4Network`
 fn parse_network(address: &str, mask: Option<&str>) -> Result<Ipv4Network> {
     if let Some(mask_str) = mask {
-        let ip = address
-            .parse::<Ipv4Addr>()
-            .wrap_err("Invalid IP address")?;
-        let mask_ip = mask_str
-            .parse::<Ipv4Addr>()
-            .wrap_err("Invalid network mask")?;
+        let ip = address.parse::<Ipv4Addr>().wrap_err("Invalid IP address")?;
+        let mask_ip = mask_str.parse::<Ipv4Addr>().wrap_err("Invalid network mask")?;
         let mask_u32 = u32::from(mask_ip);
         let prefix = (32 - mask_u32.trailing_zeros()) as u8;
         Ipv4Network::new(ip, prefix).wrap_err("Failed to build network from mask")
@@ -116,8 +110,8 @@ fn parse_network(address: &str, mask: Option<&str>) -> Result<Ipv4Network> {
 fn print_network(net: &Ipv4Network) {
     let prefix = net.prefix();
     let netaddr = net.network();
-    let bcast   = net.broadcast();
-    let mask    = net.mask();
+    let bcast = net.broadcast();
+    let mask = net.mask();
     let count: u64 = 1 << (32 - prefix);
 
     let mut labels = vec![
@@ -132,20 +126,11 @@ fn print_network(net: &Ipv4Network) {
         labels = vec!["1 Address Total:"];
     }
 
-    let label_width = labels
-        .iter()
-        .map(|s| s.len())
-        .max()
-        .expect("at least one label");
+    let label_width = labels.iter().map(|s| s.len()).max().expect("at least one label");
 
     let pad_label = |s: &str| format!("{:>width$}", s, width = label_width).yellow();
 
-    println!(
-        "{}",
-        format!("{}/{}:", netaddr, prefix)
-            .bold()
-            .magenta()
-    );
+    println!("{}", format!("{}/{}:", netaddr, prefix).bold().magenta());
 
     println!(
         "  {}  {}  {:<16}",
@@ -171,10 +156,10 @@ fn print_network(net: &Ipv4Network) {
         return;
     }
 
-    let usable = if count > 2 { count - 2 } else { 0 };
+    let usable = count.saturating_sub(2);
     if usable > 0 {
         let first = Ipv4Addr::from(u32::from(netaddr) + 1);
-        let last  = Ipv4Addr::from(u32::from(bcast) - 1);
+        let last = Ipv4Addr::from(u32::from(bcast) - 1);
         println!(
             "  {}  {}  {:<16}",
             pad_label("First Host:"),
